@@ -73,7 +73,7 @@ void draw_test(TCanvas *cvs, int seed, int iseed)
     auto hist_x_in_process_3    = new TH1D(Form("hist_x_in_process_3_%d",iseed) ,"x in deblurring process 3", num_bins,x_min,x_max);
     auto hist_x_restored        = new TH1D(Form("hist_x_restored_%d",iseed)     ,"x restored",                num_bins,x_min,x_max);
 
-    double sum_variance = 0.;
+    double x_mean_average_error_squared = 0.;
     for (auto i_event=0; i_event<num_events; ++i_event) {
         double x_mean=0.;
         double x_squared_mean=0.;
@@ -83,13 +83,23 @@ void draw_test(TCanvas *cvs, int seed, int iseed)
             //double x_init = gRandom -> Uniform(-x_range, x_range);
             double x_init = gRandom -> Uniform(-x_range+x_range_off, x_range+x_range_off);
             x_init_array[i_particle] = x_init;
-            x_mean          += x_init;
-            x_squared_mean  += x_init*x_init;
+            x_mean         += x_init;
+            x_squared_mean += x_init*x_init;
         }
-        x_mean              = x_mean         / num_particles;
-        x_squared_mean      = x_squared_mean / num_particles;
-        double x_variance = (x_squared_mean-x_mean*x_mean) / (num_particles-1);
-        sum_variance += x_variance;
+        x_mean            = x_mean         / num_particles;
+        x_squared_mean    = x_squared_mean / num_particles;
+        //!estimate of average error squared
+        double x_variance = (x_squared_mean-x_mean*x_mean);
+        double x_average_error_squared = (x_squared_mean-x_mean*x_mean) / (num_particles-1);
+        {
+            double x_variance2 = 0;
+            for (auto i_particle=0; i_particle<num_particles; ++i_particle) {
+                x_variance2 += (x_mean-x_init_array[i_particle])*(x_mean-x_init_array[i_particle]);
+            }
+            x_variance2 = x_variance2/(num_particles-1);
+            //cout << x_average_error_squared << " " << x_variance2 << endl;
+        }
+        x_mean_average_error_squared += x_average_error_squared;
         for (auto i_particle=0; i_particle<num_particles; ++i_particle)
         {
             double x_init = x_init_array[i_particle];
@@ -101,20 +111,59 @@ void draw_test(TCanvas *cvs, int seed, int iseed)
         }
     }
 
-    double x_mean_of_variance = sum_variance / num_events;
-    double variance_uniform_dist = x_max/3.;
-    double variance_div_num_particles = variance_uniform_dist / num_particles;
-    double sigma_new = TMath::Sqrt(variance_div_num_particles);
-    double norm_factor = 1. / (sigma_new * TMath::Sqrt(2*TMath::Pi()));
-
     /// renormalized width of average position: ptcle vs rest
-    double variance_norm = x_mean_of_variance * num_particles/(num_particles-1);
-    double sqrt_vn = TMath::Sqrt(variance_norm);
-    double norm_factor2 = 1. / (sqrt_vn * TMath::Sqrt(2*TMath::Pi()));
+    x_mean_average_error_squared = x_mean_average_error_squared / num_events;
+
+    //SIGXK=XAKS*NPART/(NPART-1)  !renormalized width of average position: ptcle vs rest
+    double sigmaX = x_mean_average_error_squared * num_particles/(num_particles-1);
+    double sqrt_vn = TMath::Sqrt(sigmaX);
+    double norm_factor1 = 1. / (sqrt_vn * TMath::Sqrt(2*TMath::Pi()));
+    cout << endl;
+    cout << x_mean_average_error_squared << " " << sigmaX << " " << sqrt_vn << " " << norm_factor1 << endl;
+
+    {
+        double a_average_error_squared = (x_range*2)*(x_range*2)/12.; // variance
+        double a_mean_average_error_squared = a_average_error_squared / num_particles;
+
+        double sigmaA = a_mean_average_error_squared * num_particles / (num_particles-1);
+        double sqrt_vn2 = TMath::Sqrt(sigmaA);
+        double norm_factor2 = 1. / (sqrt_vn2 * TMath::Sqrt(2*TMath::Pi()));
+        cout << a_mean_average_error_squared << " " << sigmaA << " " << sqrt_vn2 << " " << norm_factor2 << endl;
+        cout << endl;
+
+        sigmaX = sigmaA;
+        norm_factor1 = norm_factor2;
+    }
+
+
+    cout << "num_deconvolution : " << num_deconvolution << endl;
+    cout << "num_events          " << num_events << endl;
+    cout << "num_particles       " << num_particles << endl;
+    cout << "num_bins            " << num_bins << endl;
+    cout << "x_max               " << x_max << endl;
+    cout << "x_min               " << x_min << endl;
+    cout << "x_range             " << x_range << endl;
+    cout << "lambda              " << lambda << endl;
+    cout << "acc_power           " << acc_power << endl;
+    cout << "hist_min            " << hist_min << endl;
+    cout << "hist_max            " << hist_max << endl;
+    cout << "factor_height       " << factor_height << endl;
+    cout << "width               " << width << endl;
+    cout << endl;
+
+    //cout << "variance_uniform_dist      : " << variance_uniform_dist  << endl;
+    //cout << "variance_div_num_particles : " << variance_div_num_particles  << endl;
+    //cout << "sigma_new                  : " << sigma_new  << endl;
+    //cout << "norm_factor                : " << norm_factor  << endl;
+    cout << "x_mean_average_error_squared         : " << x_mean_average_error_squared  << endl;
+    cout << "sigmaX                     : " << sigmaX  << endl;
+    //cout << "sqrt_vn                    : " << sqrt_vn  << endl;
+    cout << "norm_factor1               : " << norm_factor1  << endl;
+    cout << endl;
 
     for (auto hbin=1; hbin<=num_bins; ++hbin) {
         double bin_x = hist_x_smearing -> GetBinCenter(hbin);
-        double smearing = norm_factor2 * TMath::Exp(-.5*bin_x*bin_x/variance_norm)*bin_width;
+        double smearing = norm_factor1 * TMath::Exp(-.5*bin_x*bin_x/sigmaX)*bin_width;
         hist_x_smearing -> SetBinContent(hbin,smearing);
     }
 
@@ -130,7 +179,6 @@ void draw_test(TCanvas *cvs, int seed, int iseed)
         //for (auto i=1; i<=12; ++i) cvs_restore -> cd(i) -> SetGrid();
     }
 
-    /*
     /// deconvolution
     for (auto i_iterate=1; i_iterate<=num_deconvolution; ++i_iterate)
     {
@@ -224,7 +272,6 @@ void draw_test(TCanvas *cvs, int seed, int iseed)
             }
         }
     }
-    */
 
     hist_x_init -> SetMinimum(0);
     hist_x_init -> Scale(1./(bin_width*num_events));

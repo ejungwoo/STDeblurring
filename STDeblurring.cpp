@@ -16,7 +16,10 @@ bool STDeblurring::Init()
     // Put intialization todos here which are not iterative job though event
     cout << "Initializing STDeblurring" << std::endl;
 
-    fArrayInitData = new double[fNumBins];
+    fHistMeasured = new TH1D(fName+"_measured",fTitle+" initial distribution;x",fNumBins,fXMin,fXMax);
+    fHistSmearing = new TH1D(fName+"_smearing",fTitle+" smearing;x",fNumBins,fXMin,fXMax);
+
+    fArrayMeasured = new double[fNumBins];
     fArraySmearing = new double[fNumBins];
     fArrayProcess2 = new double[fNumBins];
     fArrayProcess3 = new double[fNumBins];
@@ -34,11 +37,17 @@ void STDeblurring::Clear(Option_t *option)
     fXMax = 0;
     fLambda = 0.01;
     fAccelerationPower = 1.99;
-    memset(fArrayInitData, 0, sizeof(double)*fNumBins);
+
+    memset(fArrayMeasured, 0, sizeof(double)*fNumBins);
     memset(fArraySmearing, 0, sizeof(double)*fNumBins);
     memset(fArrayProcess2, 0, sizeof(double)*fNumBins);
     memset(fArrayProcess3, 0, sizeof(double)*fNumBins);
     memset(fArrayRestored, 0, sizeof(double)*fNumBins);
+
+    fMeanAverageErrorSquared = 0;
+
+    fHistMeasured -> Reset();
+    fHistSmearing -> Reset();
 }
 
 void STDeblurring::Print(Option_t *option) const
@@ -51,30 +60,30 @@ void STDeblurring::Print(Option_t *option) const
     cout << "fXMax : " << fXMax << std::endl;
     cout << "fLambda : " << fLambda << std::endl;
     cout << "fAccelerationPower : " << fAccelerationPower << std::endl;
-    for (auto iBin=0; iBin<fNumBins; ++iBin) cout << fArrayInitData[iBin] << " "; cout << endl;
-    for (auto iBin=0; iBin<fNumBins; ++iBin) cout << fArraySmearing[iBin] << " "; cout << endl;
-    for (auto iBin=0; iBin<fNumBins; ++iBin) cout << fArrayProcess2[iBin] << " "; cout << endl;
-    for (auto iBin=0; iBin<fNumBins; ++iBin) cout << fArrayProcess3[iBin] << " "; cout << endl;
-    for (auto iBin=0; iBin<fNumBins; ++iBin) cout << fArrayRestored[iBin] << " "; cout << endl;
+    for (auto bin=0; bin<fNumBins; ++bin) cout << fArrayMeasured[bin] << " "; cout << endl;
+    for (auto bin=0; bin<fNumBins; ++bin) cout << fArraySmearing[bin] << " "; cout << endl;
+    for (auto bin=0; bin<fNumBins; ++bin) cout << fArrayProcess2[bin] << " "; cout << endl;
+    for (auto bin=0; bin<fNumBins; ++bin) cout << fArrayProcess3[bin] << " "; cout << endl;
+    for (auto bin=0; bin<fNumBins; ++bin) cout << fArrayRestored[bin] << " "; cout << endl;
 }
 
 void STDeblurring::Draw(Option_t *option)
 {
-    if (fHistInitData==nullptr) fHistInitData = new TH1D(fName+"_initData",fTitle+" initial distribution;x",fNumBins,fXMin,fXMax);
+    if (fHistMeasured==nullptr) fHistMeasured = new TH1D(fName+"_measured",fTitle+" initial distribution;x",fNumBins,fXMin,fXMax);
     if (fHistSmearing==nullptr) fHistSmearing = new TH1D(fName+"_smearing",fTitle+" smearing;x",fNumBins,fXMin,fXMax);
     if (fHistProcess2==nullptr) fHistProcess2 = new TH1D(fName+"_process2",fTitle+";x",fNumBins,fXMin,fXMax);
     if (fHistProcess3==nullptr) fHistProcess3 = new TH1D(fName+"_process3",fTitle+";x",fNumBins,fXMin,fXMax);
     if (fHistRestored==nullptr) fHistRestored = new TH1D(fName+"_restored",fTitle+" restored distribution;x",fNumBins,fXMin,fXMax);
 
-    for (auto iBin=0; iBin<fNumBins; ++iBin) fHistInitData -> SetBinContent(iBin+1,fArrayInitData[iBin]);
-    for (auto iBin=0; iBin<fNumBins; ++iBin) fHistSmearing -> SetBinContent(iBin+1,fArraySmearing[iBin]);
-    for (auto iBin=0; iBin<fNumBins; ++iBin) fHistProcess2 -> SetBinContent(iBin+1,fArrayProcess2[iBin]);
-    for (auto iBin=0; iBin<fNumBins; ++iBin) fHistProcess3 -> SetBinContent(iBin+1,fArrayProcess3[iBin]);
-    for (auto iBin=0; iBin<fNumBins; ++iBin) fHistRestored -> SetBinContent(iBin+1,fArrayRestored[iBin]);
+    for (auto bin=0; bin<fNumBins; ++bin) fHistMeasured -> SetBinContent(bin+1,fArrayMeasured[bin]);
+    for (auto bin=0; bin<fNumBins; ++bin) fHistSmearing -> SetBinContent(bin+1,fArraySmearing[bin]);
+    for (auto bin=0; bin<fNumBins; ++bin) fHistProcess2 -> SetBinContent(bin+1,fArrayProcess2[bin]);
+    for (auto bin=0; bin<fNumBins; ++bin) fHistProcess3 -> SetBinContent(bin+1,fArrayProcess3[bin]);
+    for (auto bin=0; bin<fNumBins; ++bin) fHistRestored -> SetBinContent(bin+1,fArrayRestored[bin]);
 
     auto cvs = new TCanvas("cvs","",1000,800);
     cvs -> Divide(3,2);
-    cvs -> cd(1); fHistInitData -> Draw();
+    cvs -> cd(1); fHistMeasured -> Draw();
     cvs -> cd(2); fHistRestored -> Draw();
     cvs -> cd(3); fHistSmearing -> Draw();
     cvs -> cd(4); fHistProcess2 -> Draw();
@@ -123,93 +132,101 @@ double* STDeblurring::CreateUniformExample(int numEvents, int numParticles, doub
     }
 
     double* array = new double[fNumBins];
-    for (auto iBin=0; iBin<numBins; ++iBin)
-        array[iBin] = fHistReference -> GetBinContent(iBin+1);
-
-    //const double *array = fHistReference -> GetArray();
-    //for (auto iBin=0; iBin<numBins; ++iBin)
-    //    cout << fHistReference -> GetBinContent(iBin) << " " << array[iBin] << endl;
-
-    /*
-    double x_mean_of_variance = sum_variance / numEvents;
-    double variance_uniform_dist = x_max/3.;
-    double variance_div_num_particles = variance_uniform_dist / numParticles;
-    double sigma_new = TMath::Sqrt(variance_div_num_particles);
-    double norm_factor = 1. / (sigma_new * TMath::Sqrt(2*TMath::Pi()));
-
-    /// renormalized width of average position: ptcle vs rest
-    double variance_norm = x_mean_of_variance * numParticles/(numParticles-1);
-    double sqrt_vn = TMath::Sqrt(variance_norm);
-    double norm_factor2 = 1. / (sqrt_vn * TMath::Sqrt(2*TMath::Pi()));
-
-    for (auto iBin=1; iBin<=num_bins; ++iBin) {
-        double bin_x = hist_x_smearing -> GetBinCenter(iBin);
-        double smearing = norm_factor2 * TMath::Exp(-.5*bin_x*bin_x/variance_norm)*bin_width;
-        hist_x_smearing -> SetBinContent(iBin,smearing);
-    }
-
-    double sum_x_renormalized=0.;
-    for (auto iBin=1; iBin<=num_bins; ++iBin)
-        sum_x_renormalized += fHistReference -> GetBinContent(iBin);
-        */
+    for (auto bin=0; bin<numBins; ++bin)
+        array[bin] = fHistReference -> GetBinContent(bin+1);
 
     return array;
 }
 
-
-void Run()
+void STDeblurring::SetData(double *array, int numData)
 {
-    double xMeanOfVariance = sum_variance / numEvents;
-    double varianceOfUniformDist = x_max/3.;
-    double variance_div_num_particles = varianceOfUniformDist / numParticles;
-    double sigma_new = TMath::Sqrt(variance_div_num_particles);
-    double norm_factor = 1. / (sigma_new * TMath::Sqrt(2*TMath::Pi()));
+    double x_mean=0.;
+    double x_squared_mean=0.;
+    for (int iData=0; iData<numData; ++iData) {
+        auto value = array[iData];
+        x_mean         += value;
+        x_squared_mean += value*value;
+    }
+    x_mean            = x_mean         / numData;
+    x_squared_mean    = x_squared_mean / numData;
+    double x_variance = (x_squared_mean-x_mean*x_mean);
+    double x_average_error_squared = (x_squared_mean-x_mean*x_mean) / (numData-1);
 
-    /// renormalized width of average position: ptcle vs rest
-    double variance_norm = xMeanOfVariance * numParticles/(numParticles-1);
-    double sqrt_vn = TMath::Sqrt(variance_norm);
-    double norm_factor2 = 1. / (sqrt_vn * TMath::Sqrt(2*TMath::Pi()));
-
-    for (auto iBin=0; iBin<fNumBins; ++iBin)
+    fMeanAverageErrorSquared += x_average_error_squared;
+    for (auto i_particle=0; i_particle<numData; ++i_particle)
     {
-        double xBin = fHistReference -> GetBinCenter(iBin);
-        double smearing = norm_factor2 * TMath::Exp(-.5*xBin*xBin/variance_norm)*bin_width;
-        fArraySmearing -> SetBinContent(iBin,smearing);
+        double x_init = array[i_particle];
+        double x_normalized = (numData*x_mean - x_init) / (numData-1);
+        double x_renormalized = x_init - x_normalized;
+        fHistMeasured -> Fill(x_renormalized);
+        fHistRestored -> Fill(x_renormalized);
+    }
+}
+
+void STDeblurring::Run()
+{
+    //
+    int num_off = 0;
+    if (fNumBins%2==0) num_off = fNumBins/2;
+    else num_off = (fNumBins+1)/2;
+    //
+
+    //
+    double varianceOfUniformDist = (fXMax-fXMin)*(fXMax-fXMin)/12.; // variance;
+    fMeanAverageErrorSquared = varianceOfUniformDist / 10;
+    //
+    //
+
+    double sumRenormalized=0.;
+    for (auto bin=0; bin<fNumBins; ++bin) {
+        fArrayMeasured[bin] = fHistMeasured -> GetBinContent(bin+1);
+        fArrayRestored[bin] = fHistRestored -> GetBinContent(bin+1);
+        sumRenormalized += fArrayMeasured[bin];
+    }
+
+    double sigmaSmear = TMath::Sqrt(fMeanAverageErrorSquared);
+    double normSmear = 1. / (sigmaSmear * TMath::Sqrt(2*TMath::Pi()));
+
+    for (auto bin=0; bin<fNumBins; ++bin)
+    {
+        double xBin = fHistReference -> GetBinCenter(bin);
+        double smearing = normSmear * TMath::Exp(-.5*xBin*xBin/sigmaSmear)*fBinWidth;
+        fArraySmearing[bin] = smearing;
     }
 
     for (auto iIterate=0; iIterate<fNumIterations; ++iIterate)
     {
-        for (auto iBin2=0; iBin2<num_bins; ++iBin2)
+        for (auto bin2=0; bin2<fNumBins; ++bin2)
         {
             double xSmearRestore = 0.;
-            for (auto hBinS=0; hBinS<num_bins; ++hBinS)
+            for (auto binS=0; binS<fNumBins; ++binS)
             {
-                int iBinR = iBin2 - hBinS + num_off;
-                if (iBinR>0 && iBinR<=num_bins)
+                int binR = bin2 - binS + num_off;
+                if (binR>0 && binR<=fNumBins)
                 {
-                    double xSmeared = fArraySmearing -> GetBinContent(hBinS);
-                    double xRestore = hist_x_restored -> GetBinContent(iBinR);
+                    double xSmeared = fArraySmearing[binS];
+                    double xRestore = fArrayRestored[binR];
                     xSmearRestore += xSmeared * xRestore;
                 }
             }
             /// convoluted current restore w/blurring function
-            fArrayProcess2[iBin2] = xSmearRestore;
+            fArrayProcess2[bin2] = xSmearRestore;
         }
-        //break;
 
-        for (auto iBinR=0; iBinR<num_bins; ++iBinR)
+        for (auto binR=0; binR<fNumBins; ++binR)
         {
             double x_restore1=0.;
-            for (auto hBinS=0; hBinS<num_bins; ++hBinS)
+            for (auto binS=0; binS<fNumBins; ++binS)
             {
-                int iBin_m = iBinR + hBinS - num_off;
-                if (iBin_m>0 && iBin_m<=num_bins)
+                int binM = binR + binS - num_off;
+                if (binM>0 && binM<=fNumBins)
                 {
-                    double xSmeared        = hist_x_smearing -> GetBinContent(hBinS);
-                    double x_renormalized   = hist_x_measured -> GetBinContent(iBin_m);
-                    double xSmearRestore  = fArrayProcess2 -> GetBinContent(iBin_m);
+                    double xSmeared      = fArraySmearing[binS];
+                    double xReNormalized = fArrayMeasured[binM];
+                    double xSmearRestore = fArrayProcess2[binM];
+
                     if (xSmearRestore>0.)
-                        x_restore1 += xSmeared * x_renormalized / xSmearRestore;
+                        x_restore1 += xSmeared * xReNormalized / xSmearRestore;
                     else
                         x_restore1 += xSmeared;
                 }
@@ -217,27 +234,27 @@ void Run()
 
 
             double regularization_factor = 1.;
-            if (iBinR>1 && iBinR<=num_bins-1)
+            if (binR>1 && binR<=fNumBins-1)
             {
-                double x_reno_0 = hist_x_restored -> GetBinContent(iBinR);
-                double x_reno_b = hist_x_restored -> GetBinContent(iBinR-1);
-                double x_reno_a = hist_x_restored -> GetBinContent(iBinR+1);
-                if      (x_reno_0 > x_reno_b && x_reno_0 > x_reno_a) regularization_factor = 1./(1. + lambda); // peak
-                else if (x_reno_0 < x_reno_b && x_reno_0 < x_reno_a) regularization_factor = 1./(1. - lambda); // bump
+                double x_reno_0 = fArrayRestored[binR];
+                double x_reno_b = fArrayRestored[binR-1];
+                double x_reno_a = fArrayRestored[binR+1];
+                if      (x_reno_0 > x_reno_b && x_reno_0 > x_reno_a) regularization_factor = 1./(1. + fLambda); // peak
+                else if (x_reno_0 < x_reno_b && x_reno_0 < x_reno_a) regularization_factor = 1./(1. - fLambda); // bump
             }
 
-            double x_restore2 = hist_x_restored -> GetBinContent(iBinR);
-            double x_restore3 = x_restore2 * regularization_factor * TMath::Power(x_restore1, acc_power);
-            hist_x_in_process_3 -> SetBinContent(iBinR, x_restore3);
+            double x_restore2 = fArrayRestored[binR];
+            double x_restore3 = x_restore2 * regularization_factor * TMath::Power(x_restore1, fAccelerationPower);
+            fArrayProcess3[binR] = x_restore3;
         }
 
         double sum_of_xsr=0.;
-        for (auto iBin=0; iBin<num_bins; ++iBin)
-            sum_of_xsr += hist_x_in_process_3 -> GetBinContent(iBin);
+        for (auto bin=0; bin<fNumBins; ++bin)
+            sum_of_xsr += fArrayProcess3[bin];
 
-        for (auto iBin=0; iBin<num_bins; ++iBin) {
-            double content = hist_x_in_process_3 -> GetBinContent(iBin) * sum_x_renormalized / sum_of_xsr;
-            hist_x_restored -> SetBinContent(iBin,content);
+        for (auto bin=0; bin<fNumBins; ++bin) {
+            double content = fArrayProcess3[bin] * sumRenormalized / sum_of_xsr;
+            fArrayRestored[bin] = content;
         }
 
         /*
@@ -264,7 +281,7 @@ void Run()
             {
                 ++i_pad_restore;
                 cvs_restore -> cd(i_pad_restore);
-                auto hist_restored_clone = (TH1D *) hist_x_restored -> Clone(Form("restored_it%d_%d",iIterate,iseed));
+                auto hist_restored_clone = (TH1D *) fArrayRestored -> Clone(Form("restored_it%d_%d",iIterate,iseed));
                 hist_restored_clone -> SetTitle(Form("restored with iteration=%d",iIterate));
                 hist_restored_clone -> Draw();
             }
