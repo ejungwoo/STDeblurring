@@ -9,6 +9,7 @@ STDeblurring::STDeblurring(const char* name, const char* title)
 : TNamed(name,title)
 {
     Init();
+    Clear();
 }
 
 bool STDeblurring::Init()
@@ -78,19 +79,25 @@ void STDeblurring::Draw(Option_t *option)
     for (auto bin=0; bin<fNumBins; ++bin) fHistProcess3 -> SetBinContent(bin+1,fArrayProcess3[bin]);
     for (auto bin=0; bin<fNumBins; ++bin) fHistRestored -> SetBinContent(bin+1,fArrayRestored[bin]);
 
-    auto cvs = new TCanvas("cvs","",1250,700);
-    cvs -> Divide(3,2);
-    cvs -> cd(1); fHistDataSets -> Draw();
-    cvs -> cd(2); fHistMeasured -> Draw();
-    cvs -> cd(3);
+    if (fCanvas==nullptr) {
+        fCanvas = new TCanvas("cvs","",1250,700);
+        fCanvas -> Divide(3,2);
+    }
+    fCanvas -> cd(1); fHistDataSets -> Draw();
+    fCanvas -> cd(2); fHistMeasured -> Draw();
+    fCanvas -> cd(3);
+    fHistRestored -> Draw();
     auto cHistMeasured = (TH1D *) fHistMeasured -> Clone(fName+"_measured2");
     cHistMeasured -> SetLineStyle(2);
     cHistMeasured -> SetLineColor(kRed);
-    cHistMeasured -> Draw();
-    fHistRestored -> Draw("same");
-    cvs -> cd(4); fHistSmearing -> Draw();
-    cvs -> cd(5); fHistProcess2 -> Draw();
-    cvs -> cd(6); fHistProcess3 -> Draw();
+    cHistMeasured -> Draw("same");
+    fCanvas -> cd(4); fHistSmearing -> Draw();
+    fCanvas -> cd(5); fHistProcess2 -> Draw();
+    fCanvas -> cd(6); fHistProcess3 -> Draw();
+}
+
+void STDeblurring::SaveFigures() {
+    fCanvas -> SaveAs(Form("figures/%s_%s.pdf",fName.Data(),fCanvas->GetName()));
 }
 
 void STDeblurring::CreateUniformExample(double *array, int numPoints, double xRange1, double xRange2)
@@ -112,7 +119,7 @@ void STDeblurring::SetData(EDataType dataType, double *array, int numPoints)
         fHistMeasured = new TH1D(fName+"_measured",fTitle+" measured distribution;x",fNumBins,fXMin,fXMax);
         fHistDataSets = new TH1D(fName+"_datasets",fTitle+" example data set;x",fNumBins,fXMin,fXMax);
     }
-    fHistDataSets -> Reset("ICES");
+    //fHistDataSets -> Reset("ICES");
 
     double xMean=0.;
     double xSquaredMean=0.;

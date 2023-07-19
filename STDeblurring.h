@@ -2,6 +2,8 @@
 #define STDEBLURRING_HH
 
 #include "TNamed.h"
+#include "TH1D.h"
+#include "TCanvas.h"
 
 class STDeblurring : public TNamed
 {
@@ -13,6 +15,7 @@ class STDeblurring : public TNamed
         void Clear(Option_t *option="");
         void Print(Option_t *option="") const;
         void Draw(Option_t *option="");
+        void SaveFigures();
 
 
         int GetNumIterations() const  { return fNumIterations; }
@@ -90,6 +93,8 @@ class STDeblurring : public TNamed
         TH1D*        fHistProcess2 = nullptr;
         TH1D*        fHistProcess3 = nullptr;
         TH1D*        fHistRestored = nullptr;
+
+        TCanvas*     fCanvas = nullptr;
 
     //ClassDef(STDeblurring,1);
 };
